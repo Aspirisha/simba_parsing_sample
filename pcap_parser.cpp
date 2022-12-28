@@ -36,10 +36,34 @@ PcapParser::PcapParser(std::unique_ptr<std::istream> input) : input_(std::move(i
     ", while supported is ", kExpectedMajorVersion);
   }
 
-  if (file_header_.version_minor > kExpectedMajorVersion) {
+  if (file_header_.version_minor > kExpectedMinorVersion) {
     throw_runtime_exception("Unsupported protocol minor version: ", file_header_.version_minor,
     ", while supported is at most ", kExpectedMinorVersion);
   }
+
+  input_->read(reinterpret_cast<char*>(&next_packet_header_), sizeof(PacketHeader));
+}
+
+bool PcapParser::HasNextPacket() const {
+  return !input_->eof();
+}
+
+Packet PcapParser::NextPacket() {
+  if (!HasNextPacket()) {
+    throw_runtime_exception("Packets stream exausted");
+  }
+
+  std::vector<uint8_t> data(next_packet_header_.captured_packet_length);
+  input_->read(reinterpret_cast<char*>(data.data()), next_packet_header_.captured_packet_length);
+
+  Packet result{
+    .header = next_packet_header_,
+    .data = data
+  };
+
+  input_->read(reinterpret_cast<char*>(&next_packet_header_), sizeof(PacketHeader));
+
+  return result;
 }
 
 }  // namespace pcap

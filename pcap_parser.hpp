@@ -38,9 +38,11 @@ class PcapParser {
   explicit PcapParser(std::unique_ptr<std::istream> input);
 
   bool HasNextPacket() const;
+
   Packet NextPacket();
  private:
   FileHeader file_header_;
+  PacketHeader next_packet_header_;
   std::unique_ptr<std::istream> input_;
 };
 
