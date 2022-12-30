@@ -1,9 +1,16 @@
 #pragma once
 
-#include <cstdint>
 #include <any>
+#include <bit>
+#include <cstdint>
 #include <functional>
 #include <unordered_map>
+#include <vector>
+
+#include "types.hpp"
+
+static_assert(std::endian::native == std::endian::little,
+              "This library is currently supported only for little-endian machines");
 
 namespace pcap {
   class PcapPacket;
@@ -60,6 +67,11 @@ struct SbeHeader {
   uint16_t version;
 };
 
+struct __attribute__ ((packed)) SbeRepeatingGroup {
+  uint16_t block_length;
+  uint8_t num_in_group;
+};
+
 enum class PacketType {
   Incremental,
   Snapshot
@@ -76,10 +88,6 @@ enum class SnapshotMessage {
   OrderBookSnapshot = 7,
 };
 
-struct Decimal5 {
-  int64_t mantissa;
-};
-
 struct __attribute__ ((packed)) OrderUpdateMessage {
   int64_t md_entry_id;
   Decimal5 md_entry_px;
@@ -87,22 +95,45 @@ struct __attribute__ ((packed)) OrderUpdateMessage {
   uint64_t md_flags;
   int32_t security_id;
   uint32_t rpt_seq;
-  uint8_t md_update_action;
+  MdUpdateAction md_update_action;
   char md_entry_type;
 };
 
 struct __attribute__ ((packed)) OrderExecutionMessage {
   int64_t md_entry_id;
-  Decimal5 md_entry_px;
-  int64_t md_entry_size;
+  Decimal5Null md_entry_px;
+  Int64Null md_entry_size;
   Decimal5 last_px;
   int64_t last_qty;
   int64_t trade_id;
   uint64_t md_flags;
   int32_t security_id;
   uint32_t rpt_seq;
-  uint8_t md_update_action;
+  MdUpdateAction md_update_action;
   char md_entry_type;
+};
+
+struct __attribute__ ((packed)) OrderBookSnapshotHeader {
+  int32_t security_id;
+  uint32_t last_msg_seq_num_processed;
+  uint32_t rpt_seq;
+  uint32_t exchange_trading_session_id;
+  SbeRepeatingGroup no_md_entries;
+};
+
+struct __attribute__ ((packed)) OrderBookSnapshotEntry {
+  Int64Null md_entry_id;
+  uint64_t transact_time;
+  Decimal5Null md_entry_px;
+  Int64Null md_entry_size;
+  Int64Null trade_id;
+  uint64_t md_flags_set;
+  char md_entry_type;
+};
+
+struct OrderBookSnapshotMessage {
+  OrderBookSnapshotHeader header;
+  std::vector<OrderBookSnapshotEntry> md_entries;
 };
 
 class SimbaParser {

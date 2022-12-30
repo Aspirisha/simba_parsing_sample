@@ -1,11 +1,10 @@
 #include "simba_parser.hpp"
 
-#include "pcap_parser.hpp"
 #include <arpa/inet.h>
+#include <boost/log/trivial.hpp>
 
 #include "exception_helpers.hpp"
-
-#include <boost/log/trivial.hpp>
+#include "pcap_parser.hpp"
 
 namespace simba {
 
@@ -154,6 +153,9 @@ void SimbaParser::ParseIncrementalPacket(
       }
       assert(sbe_header.block_length == sizeof(OrderUpdateMessage));
       memcpy(&message, incremental_packet_start + offset, sbe_header.block_length);
+      for (auto& callback : incremental_callbacks_[IncrementalMessage::OrderUpdate]) {
+        callback(message);
+      }
       break;
     }
     case IncrementalMessage::OrderExecution: {
@@ -163,6 +165,9 @@ void SimbaParser::ParseIncrementalPacket(
       }
       assert(sbe_header.block_length == sizeof(OrderExecutionMessage));
       memcpy(&message, incremental_packet_start + offset, sbe_header.block_length);
+      for (auto& callback : incremental_callbacks_[IncrementalMessage::OrderExecution]) {
+        callback(message);
+      }
       break;
     }
     case IncrementalMessage::BestPrices: {
@@ -174,19 +179,13 @@ void SimbaParser::ParseIncrementalPacket(
       break;
     }
     default:
-      if (sbe_header.template_id > 20) {
-        BOOST_LOG_TRIVIAL(debug) << "Unsupported incremental message id " << sbe_header.template_id;
-      } else {
-        BOOST_LOG_TRIVIAL(debug) << "Received unsupported incremental message " << sbe_header.template_id;
-      }
+      BOOST_LOG_TRIVIAL(debug) << "Received unsupported incremental message " << sbe_header.template_id;
       break;
     }
     offset += sbe_header.block_length;
   }
 
-  if (offset > header.msg_size) {
-    BOOST_LOG_TRIVIAL(debug) << "ops!";
-  }
+  assert(offset == message_size);
 }
 
 void SimbaParser::ParseSnapshotPacket(
@@ -194,11 +193,33 @@ void SimbaParser::ParseSnapshotPacket(
   const MarketDataPacketHeader &header) {
     SbeHeader sbe_header;
     memcpy(&sbe_header, snapshot_packet_start, sizeof(SbeHeader));
+    size_t offset = sizeof(SbeHeader);
     switch (static_cast<SnapshotMessage>(sbe_header.template_id)) {
-      case SnapshotMessage::OrderBookSnapshot:
-        BOOST_LOG_TRIVIAL(debug) << "Received snapshot message id " << sbe_header.template_id;
-      break;
+      case SnapshotMessage::OrderBookSnapshot: {
+        BOOST_LOG_TRIVIAL(debug) << "Received OrderBookSnapshot";
+        OrderBookSnapshotMessage message;
+        const auto actual_size = sbe_header.block_length + sizeof(SbeRepeatingGroup);
+        if (actual_size != sizeof(OrderBookSnapshotHeader)) {
+          BOOST_LOG_TRIVIAL(debug) << "Unexpected size of OrderBookSnapshot";
+        }
+        assert(actual_size == sizeof(OrderBookSnapshotHeader));
+        memcpy(&message.header, snapshot_packet_start + offset, actual_size);
+        message.md_entries.resize(message.header.no_md_entries.num_in_group);
+        offset += sizeof(OrderBookSnapshotHeader);
 
+        for (size_t i = 0; i < message.header.no_md_entries.num_in_group; i++) {
+          memcpy(
+            &message.md_entries[i],
+            snapshot_packet_start + offset,
+            message.header.no_md_entries.block_length);
+          offset += message.header.no_md_entries.block_length;
+        }
+
+        for (auto& callback : snapshot_callbacks_[SnapshotMessage::OrderBookSnapshot]) {
+          callback(message);
+        }
+        break;
+      }
       default:
         BOOST_LOG_TRIVIAL(debug) << "Unsupported snapshot message id " << sbe_header.template_id;
     }
