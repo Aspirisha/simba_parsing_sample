@@ -1,4 +1,5 @@
 #include "pcap_parser.hpp"
+#include "simba_parser.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -8,14 +9,11 @@ static constexpr char filename[] = "../Corvil-13052-1636559040000000000-16365606
 int main() {
   pcap::PcapParser parser(std::make_unique<std::ifstream>(filename, std::ios::binary));
 
+  simba::SimbaParser simba_parser(parser.LinkType());
   int packets_num = 0;
   while (parser.HasNextPacket()) {
     auto packet = parser.NextPacket();
-
-    if (packet.header.captured_packet_length != packet.header.original_packet_length) {
-      std::cout << packets_num << ": " << packet.header.original_packet_length 
-        << ", " << packet.header.captured_packet_length << std::endl;
-    }
+    simba_parser.FeedPcapPacket(packet);
     packets_num++;
   }
 

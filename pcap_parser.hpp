@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-#include <cstddef>
 #include <vector>
 #include <memory>
 #include <iosfwd>
@@ -17,7 +16,13 @@ struct FileHeader {
   uint32_t reserved1;
   uint32_t reserved2;
   uint32_t snap_len;
-  uint32_t link_type;
+  uint32_t link_type : 28;
+  uint32_t fcs : 3;
+  uint32_t f_bit : 1;
+};
+
+enum class PcapLinkType {
+  DLT_EN10MB = 1,
 };
 
 struct PacketHeader {
@@ -27,11 +32,10 @@ struct PacketHeader {
   uint32_t original_packet_length;
 };
 
-struct Packet {
+struct PcapPacket {
   PacketHeader header;
   std::vector<uint8_t> data;
 };
-
 
 class PcapParser {
  public:
@@ -39,7 +43,9 @@ class PcapParser {
 
   bool HasNextPacket() const;
 
-  Packet NextPacket();
+  PcapPacket NextPacket();
+
+  PcapLinkType LinkType() const;
  private:
   FileHeader file_header_;
   PacketHeader next_packet_header_;
